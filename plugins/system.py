@@ -1,6 +1,6 @@
 import os
-import time
 import platform
+import time
 from datetime import timedelta
 
 try:
@@ -13,20 +13,27 @@ from cloudbot.util.filesize import size as format_bytes
 import cloudbot
 
 
+def _get_repo_link(bot):
+    return bot.config.get(
+        'repo_link', 'https://github.com/snoonetIRC/CloudBot/'
+    )
+
+
 @hook.command(autohelp=False)
-def about(text, conn):
-    """-- Gives information about CloudBot. Use .about license for licensing information"""
+def about(text, conn, bot):
+    """- Gives information about CloudBot. Use .about license for licensing information"""
     if text.lower() in ("license", "gpl", "source"):
         return "CloudBot Refresh is released under the GPL v3 license, get the source code " \
-               "at https://github.com/CloudBotIRC/CloudBot/"
+               "at {}".format(_get_repo_link(bot))
 
-    return "{} is powered by CloudBot Refresh! ({}) - " \
-           "https://github.com/CloudBotIRC/CloudBot/".format(conn.nick, cloudbot.__version__)
+    return "{} is powered by CloudBot Refresh! ({}) - {}".format(
+        conn.nick, cloudbot.__version__, _get_repo_link(bot)
+    )
 
 
 @hook.command(autohelp=False)
 def system(reply, message):
-    """-- Retrieves information about the host system."""
+    """- Retrieves information about the host system."""
 
     # Get general system info
     sys_os = platform.platform()
@@ -39,7 +46,7 @@ def system(reply, message):
         "OS: \x02{}\x02, "
         "Python: \x02{} {}\x02, "
         "Architecture: \x02{}\x02 (\x02{}\x02)"
-        .format(
+            .format(
             sys_os,
             python_implementation,
             python_version,
@@ -51,9 +58,9 @@ def system(reply, message):
         process = psutil.Process(os.getpid())
 
         # get the data we need using the Process we got
-        cpu_usage = process.get_cpu_percent()
-        thread_count = process.get_num_threads()
-        memory_usage = format_bytes(process.get_memory_info()[0])
+        cpu_usage = process.cpu_percent(1)
+        thread_count = process.num_threads()
+        memory_usage = format_bytes(process.memory_info()[0])
         uptime = timedelta(seconds=round(time.time() - process.create_time()))
 
         message(
@@ -61,9 +68,17 @@ def system(reply, message):
             "Threads: \x02{}\x02, "
             "CPU Usage: \x02{}\x02, "
             "Memory Usage: \x02{}\x02"
-            .format(
+                .format(
                 uptime,
                 thread_count,
                 cpu_usage,
                 memory_usage)
         )
+
+
+@hook.command("sauce", "source", autohelp=False)
+def sauce(bot):
+    """- Returns a link to the source"""
+    return "Check out my source code! I am a fork of cloudbot: " \
+           "https://github.com/CloudBotIRC/CloudBot/ and my source is here: " \
+           "{}".format(_get_repo_link(bot))
