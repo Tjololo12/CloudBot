@@ -19,6 +19,14 @@ table = Table(
     Column('time_read', DateTime)
 )
 
+ignore_table = Table(
+    'tellignore',
+    database.metadata,
+    Column('connection', String(25)),
+    Column('target', String(25)),
+    Column('ignored', Boolean)
+)
+
 
 @hook.on_start
 def load_cache(db):
@@ -50,6 +58,18 @@ def count_unread(db, server, target):
         .alias("count") \
         .count()
     return db.execute(query).fetchone()[0]
+
+
+def tells_ignored(db, server, target):
+    query = select([ignore_table]) \
+        .where(ignore_table.c.connection == server.lower()) \
+        .where(ignore_table.c.target == target.lower())
+    curr = db.execute(query).fetchone()
+    if curr:
+        connect, tgt, ignore = curr
+        return ignore
+    else:
+        return False
 
 
 def read_all_tells(db, server, target):
@@ -86,6 +106,22 @@ def add_tell(db, server, sender, target, message):
     db.execute(query)
     db.commit()
     load_cache(db)
+
+
+def add_to_ignore(db, server, sender, add):
+    if tells_ignored(db, server, sender):
+        query = ignore_table.update() \
+            .where(ignore_table.c.connection == server.lower()) \
+            .where(ignore_table.c.target == sender.lower()) \
+            .values(ignored=add)
+    else:
+        query = ignore_table.insert().values(
+            connection=server.lower(),
+            sender=sender.lower(),
+            ignored=add
+        )
+    db.execute(query)
+    db.commit()
 
 
 def tell_check(conn, nick):
@@ -146,6 +182,22 @@ def showtells(nick, notice, db, conn):
     read_all_tells(db, conn.name, nick)
 
 
+@hook.command("tellignore")
+def tell_cmd(text, nick, db, notice, conn, notice_doc):
+    """[on|off] - Enables or disables tells for your current nick (default enabled)"""
+    sender = nick
+    query = text.split(' ', 1)
+
+    if query not in ["on", "ON", "off", "OFF"]:
+        notice_doc()
+        return
+    if query in ["on", "ON"]:
+        add_to_ignore(db, conn.name, sender, True)
+        notice("Tells have been disabled for your nick {}.".format(sender))
+    else:
+        add_to_ignore(db, conn.name, sender, False)
+        notice("Tells have been re-eneabled for your nick {}.".format(sender))
+
 @hook.command("tell")
 def tell_cmd(text, nick, db, notice, conn, notice_doc, is_nick_valid):
     """<nick> <message> - Relay <message> to <nick> when <nick> is around."""
@@ -170,6 +222,10 @@ def tell_cmd(text, nick, db, notice, conn, notice_doc, is_nick_valid):
 
     if count_unread(db, conn.name, target.lower()) >= 10:
         notice("Sorry, {} has too many messages queued already.".format(target))
+        return
+
+    if tells_ignored(db, conn.name, target.lower()):
+        notice("Sorry, {} has disabled tells.".format(target))
         return
 
     add_tell(db, conn.name, sender, target.lower(), message)
